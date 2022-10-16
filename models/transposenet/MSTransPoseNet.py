@@ -31,9 +31,10 @@ class MSTransPoseNet(nn.Module):
         self.transformer_rot = Transformer(config_rot)
 
         decoder_dim = self.transformer_t.d_model
+        #decoder_dim *= 2
 
-        self.input_proj_t = nn.Conv2d(self.backbone.num_channels[0], decoder_dim, kernel_size=1)
-        self.input_proj_rot = nn.Conv2d(self.backbone.num_channels[1], decoder_dim, kernel_size=1)
+        self.input_proj_t = nn.Conv2d(self.backbone.num_channels[0]*2, decoder_dim, kernel_size=1)
+        self.input_proj_rot = nn.Conv2d(self.backbone.num_channels[1]*2, decoder_dim, kernel_size=1)
 
         self.query_embed_t = nn.Embedding(num_scenes, decoder_dim)
         self.query_embed_rot = nn.Embedding(num_scenes, decoder_dim)
@@ -56,25 +57,41 @@ class MSTransPoseNet(nn.Module):
             scene_log_distr: the log softmax over the scenes
             max_indices: the index of the max value in the scene distribution
         """
-        samples = data.get('img')
+        samples1 = data.get('img1')
+        samples2 = data.get('img2')
         scene_indices = data.get('scene')
-        batch_size = samples.shape[0]
+        batch_size = samples1.shape[0]
 
         # Handle data structures
-        if isinstance(samples, (list, torch.Tensor)):
-            samples = nested_tensor_from_tensor_list(samples)
+        if isinstance(samples1, (list, torch.Tensor)):
+            samples1 = nested_tensor_from_tensor_list(samples1)
+        if isinstance(samples2, (list, torch.Tensor)):
+            samples2 = nested_tensor_from_tensor_list(samples2)
 
         # Extract the features and the position embedding from the visual backbone
-        features, pos = self.backbone(samples)
+        features1, pos1 = self.backbone(samples1)
+        features2, pos2 = self.backbone(samples2)
+        #features1[0].mask = torch.cat((features1[0].mask, features2[0].mask), dim=1)
+        features1[0].tensors = torch.cat((features1[0].tensors, features2[0].tensors), dim=1)
+        #features1[1].mask = torch.cat((features1[1].mask, features2[1].mask), dim=1)
+        features1[1].tensors = torch.cat((features1[1].tensors, features2[1].tensors), dim=1)
 
-        src_t, mask_t = features[0].decompose()
-        src_rot, mask_rot = features[1].decompose()
+        pos1[0] = torch.cat((pos1[0], pos2[0]), dim=1)
+        pos1[1] = torch.cat((pos1[1], pos2[1]), dim=1)
+
+        sum1 = sum(sum(sum(features1[0].mask)))
+        sum2 = sum(sum(sum(features2[0].mask)))
+        assert sum1==sum2
+
+
+        src_t, mask_t = features1[0].decompose()
+        src_rot, mask_rot = features1[1].decompose()
 
         # Run through the transformer to translate to "camera-pose" language
         assert mask_t is not None
         assert mask_rot is not None
-        local_descs_t = self.transformer_t(self.input_proj_t(src_t), mask_t, self.query_embed_t.weight, pos[0])[0][0]
-        local_descs_rot = self.transformer_rot(self.input_proj_rot(src_rot), mask_rot, self.query_embed_rot.weight, pos[1])[0][0]
+        local_descs_t = self.transformer_t(self.input_proj_t(src_t), mask_t, self.query_embed_t.weight, pos1[0])[0][0]
+        local_descs_rot = self.transformer_rot(self.input_proj_rot(src_rot), mask_rot, self.query_embed_rot.weight, pos1[1])[0][0]
 
         # Get the scene index with FC + log-softmax
         scene_log_distr = self.log_softmax(self.scene_embed(torch.cat((local_descs_t, local_descs_rot), dim=2))).squeeze(2)

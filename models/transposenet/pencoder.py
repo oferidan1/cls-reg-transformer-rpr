@@ -175,7 +175,8 @@ class PositionEmbeddingLearned(nn.Module):
 
 def build_position_encoding(config):
     hidden_dim = config.get("hidden_dim")
-    N_steps = hidden_dim // 2
+    #N_steps = hidden_dim // 2
+    N_steps = hidden_dim // 4
     learn_embedding_with_pose_token = config.get("learn_embedding_with_pose_token")
     if learn_embedding_with_pose_token:
         position_embedding = PositionEmbeddingLearnedWithPoseToken(N_steps)

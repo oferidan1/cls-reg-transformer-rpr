@@ -37,6 +37,7 @@ class C2FEMSTransPoseNet(EMSTransPoseNet):
         super().__init__(config, pretrained_path)
 
         decoder_dim = self.transformer_t.d_model
+        # decoder_dim *= 2
         self.regressor_head_t = PoseRegressor(decoder_dim, 3)
         self.regressor_head_rot = PoseRegressor(decoder_dim, 4)
         self.t_cluster_embed = torch.nn.Linear(decoder_dim, config.get("nclusters_position"))

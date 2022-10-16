@@ -41,14 +41,13 @@ class C2FCameraPoseDataset(CameraPoseDataset):
                 scene_orientations = self.poses[locs, 3:]
                 kmeans_orientation = KMeans(n_clusters=num_orientation_clusters, random_state=random_state).fit(
                     scene_orientations)
-                filename = labels_file + '_scene_{}_orientation_{}_classes.sav'.format(self.scenes[locs][0],
-                                                                                    num_orientation_clusters)
+                filename = labels_file + '_scene_{}_orientation_{}_classes.sav'.format(self.scenes[locs][0], num_orientation_clusters)
                 print(filename)
                 joblib.dump(kmeans_orientation, filename)
 
-
-
             else:
+                kmeans_position_file = labels_file + '_scene_{}_position_{}_classes.sav'.format(self.scenes[locs][0], num_position_clusters)
+                kmeans_orientation_file = labels_file + '_scene_{}_orientation_{}_classes.sav'.format(self.scenes[locs][0], num_orientation_clusters)
                 kmeans_position = joblib.load(kmeans_position_file)
                 kmeans_orientation = joblib.load(kmeans_orientation_file)
 
@@ -67,7 +66,8 @@ class C2FCameraPoseDataset(CameraPoseDataset):
             sampled_scene_idx = np.random.choice(range(self.num_scenes), p=self.scene_prob_selection)
             idx = np.random.choice(self.scenes_sample_indices[sampled_scene_idx])
 
-        img = imread(self.img_paths[idx])
+        img1 = imread(self.img_paths1[idx])
+        img2 = imread(self.img_paths2[idx])
         pose = self.poses[idx]
         position_cluster_id = int(self.position_cluster_ids[idx])
         orientation_cluster_id = int(self.orientation_cluster_ids[idx])
@@ -76,9 +76,10 @@ class C2FCameraPoseDataset(CameraPoseDataset):
         orientation_centroids = self.orientation_centroids[scene]
 
         if self.transform:
-            img = self.transform(img)
+            img1 = self.transform(img1)
+            img2 = self.transform(img2)
 
-        sample = {'img': img, 'pose': pose, 'scene': scene,
+        sample = {'img1': img1, 'img2': img2, 'pose': pose, 'scene': scene,
                   'position_centroids':position_centroids, 'position_cluster_id': position_cluster_id,
                   'orientation_centroids': orientation_centroids, 'orientation_cluster_id': orientation_cluster_id
                   }

@@ -10,6 +10,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn.functional as F
 from torchvision import transforms
+import ssl
+import os
+import datetime
+from tensorboardX import SummaryWriter
+import sys
+from torchvision.utils import make_grid
+
+def set_proxy():
+    ssl._create_default_https_context = ssl._create_unverified_context
+    os.environ["http_proxy"] = "http://127.0.0.1:3128"
+    os.environ["https_proxy"] = "http://127.0.0.1:3128"
+    os.environ["ftp_proxy"] = "http://127.0.0.1:3128"
+    os.environ["socks_proxy"] = "http://127.0.0.1:3128"
 
 # Logging and output utils
 ##########################
@@ -106,3 +119,43 @@ test_transforms = {
 
 
 
+def init_log(args, saved_path='default', save_dir=None):
+    current_time = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
+    if save_dir is None:
+        save_dir = os.path.join('out', "{}_{}".format(saved_path, current_time))
+    writer = SummaryWriter(os.path.join(save_dir, 'logs'))
+    # Saving run line
+    with open(os.path.join(save_dir, 'run_line.txt'), 'w') as f:
+        f.write("python {}".format(' '.join(sys.argv[:])))
+        print("python {}".format(' '.join(sys.argv[:])))
+    # Saving arguments to json
+    with open(os.path.join(save_dir, 'args.txt'), 'w') as f:
+        json.dump(args.__dict__, f, indent=2)
+        print("Saving arguments to: {}".format(os.path.join(save_dir, 'args.txt')))
+    return writer, save_dir
+
+def log_to_tensorboard(writer, progress, step):
+    with torch.no_grad():
+        writer.add_scalar(progress.meters[-1].name, progress.meters[-1].val, step)
+
+def log_img_to_tensorboard( writer, images, step):
+    with torch.no_grad():
+        batch_size = images["x1"].shape[0]
+        images_0_grid = make_grid(images["x1"][:min(5, batch_size)], nrow=min(5, batch_size), normalize=False)
+        images_1_grid = make_grid(images["x2"][:min(5, batch_size)], nrow=min(5, batch_size), normalize=False)
+        images_2_grid = make_grid(images["y1"][:min(5, batch_size)], nrow=min(5, batch_size), normalize=False)
+        images_3_grid = make_grid(images["y2"][:min(5, batch_size)], nrow=min(5, batch_size), normalize=False)
+        image_grid = torch.cat((images_0_grid, images_1_grid,images_2_grid, images_3_grid), 1)
+        writer.add_image('train/x1_x2_y1_y2', image_grid, step)
+
+def log_img_to_tensorboard_triplet( writer, images, step, miss=False):
+    with torch.no_grad():
+        batch_size = images[0].shape[0]
+        images_0_grid = make_grid(images[0][:min(5, batch_size)], nrow=min(5, batch_size), normalize=False)
+        images_1_grid = make_grid(images[1][:min(5, batch_size)], nrow=min(5, batch_size), normalize=False)
+        images_2_grid = make_grid(images[2][:min(5, batch_size)], nrow=min(5, batch_size), normalize=False)
+        image_grid = torch.cat((images_0_grid, images_1_grid, images_2_grid), 2)
+        if miss:
+            writer.add_image('test{}/anchor_positive_negative'.format("_MISS"), image_grid, step)
+        else:
+            writer.add_image('test/anchor_positive_negative', image_grid, step)

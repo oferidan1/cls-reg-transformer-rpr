@@ -68,20 +68,17 @@ def test(args, config, model, apply_c2f, num_clusters_position, num_clusters_ori
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("model_name",
-                            help="name of model to create (e.g. posenet, transposenet")
-    arg_parser.add_argument("mode", help="train or eval")
-    arg_parser.add_argument("backbone_path", help="path to backbone .pth - e.g. efficientnet")
-    arg_parser.add_argument("dataset_path", help="path to the physical location of the dataset")
-    arg_parser.add_argument("labels_file", help="path to a file mapping images to their poses")
-    arg_parser.add_argument("config_file", help="path to configuration file", default="7scenes-config.json")
-    arg_parser.add_argument("--checkpoint_path",
-                            help="path to a pre-trained model (should match the model indicated in model_name")
+    arg_parser.add_argument("--model_name", help="name of model to create (e.g. posenet, transposenet", default="c2f-ems-transposenet")
+    arg_parser.add_argument("--mode", help="train or eval", default="train")
+    arg_parser.add_argument("--backbone_path", help="path to backbone .pth - e.g. efficientnet", default="models/backbones/efficient-net-b0.pth")
+    arg_parser.add_argument("--dataset_path", help="path to the physical location of the dataset", default="/nfstemp/Datasets/7Scenes/")
+    arg_parser.add_argument("--labels_file", help="path to a file mapping images to their poses", default="datasets/7scenes_training_pairs.csv")
+    arg_parser.add_argument("--config_file", help="path to configuration file", default="7scenes_config.json")
+    arg_parser.add_argument("--checkpoint_path", help="path to a pre-trained model (should match the model indicated in model_name")
     arg_parser.add_argument("--experiment", help="a short string to describe the experiment/commit used")
     arg_parser.add_argument("--cluster_predictor_position", help="path to position k-means predictor")
     arg_parser.add_argument("--cluster_predictor_orientation", help="path to orientation k-means predictor")
-
-    arg_parser.add_argument("--test_dataset_id", default=None, help="test set id for testing on all scenes, options: 7scene OR cambridge")
+    arg_parser.add_argument("--test_dataset_id", default="7scene", help="test set id for testing on all scenes, options: 7scene OR cambridge")
 
 
     args = arg_parser.parse_args()

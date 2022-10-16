@@ -18,7 +18,7 @@ class CameraPoseDataset(Dataset):
         :return: an instance of the class
         """
         super(CameraPoseDataset, self).__init__()
-        self.img_paths, self.poses, self.scenes, self.scenes_ids = read_labels_file(labels_file, dataset_path)
+        self.img_paths1, self.img_paths2, self.poses, self.scenes, self.scenes_ids = read_labels_file(labels_file, dataset_path)
         self.dataset_size = self.poses.shape[0]
         self.num_scenes = np.max(self.scenes_ids) + 1
         self.scenes_sample_indices = [np.where(np.array(self.scenes_ids) == i)[0] for i in range(self.num_scenes)]
@@ -42,30 +42,33 @@ class CameraPoseDataset(Dataset):
             sampled_scene_idx = np.random.choice(range(self.num_scenes), p=self.scene_prob_selection)
             idx = np.random.choice(self.scenes_sample_indices[sampled_scene_idx])
 
-        img = imread(self.img_paths[idx])
+        img1 = imread(self.img_paths1[idx])
+        img2 = imread(self.img_paths2[idx])
         pose = self.poses[idx]
         scene = self.scenes_ids[idx]
         if self.transform:
-            img = self.transform(img)
+            img1 = self.transform(img1)
+            img2 = self.transform(img2)
 
-        sample = {'img': img, 'pose': pose, 'scene': scene}
+        sample = {'img1': img1, 'img2': img2, 'pose': pose, 'scene': scene}
         return sample
 
 
 def read_labels_file(labels_file, dataset_path):
     df = pd.read_csv(labels_file)
-    imgs_paths = [join(dataset_path, path) for path in df['img_path'].values]
-    scenes = df['scene'].values
+    imgs_paths1 = [join(dataset_path, path) for path in df['img_path0'].values]
+    imgs_paths2 = [join(dataset_path, path) for path in df['img_path1'].values]
+    scenes = df['scene_a'].values
     scene_unique_names = np.unique(scenes)
     scene_name_to_id = dict(zip(scene_unique_names, list(range(len(scene_unique_names)))))
     scenes_ids = [scene_name_to_id[s] for s in scenes]
     n = df.shape[0]
     poses = np.zeros((n, 7))
-    poses[:, 0] = df['t1'].values
-    poses[:, 1] = df['t2'].values
-    poses[:, 2] = df['t3'].values
-    poses[:, 3] = df['q1'].values
-    poses[:, 4] = df['q2'].values
-    poses[:, 5] = df['q3'].values
-    poses[:, 6] = df['q4'].values
-    return imgs_paths, poses, scenes, scenes_ids
+    poses[:, 0] = df['x1_ab'].values
+    poses[:, 1] = df['x2_ab'].values
+    poses[:, 2] = df['x3_ab'].values
+    poses[:, 3] = df['q1_ab'].values
+    poses[:, 4] = df['q2_ab'].values
+    poses[:, 5] = df['q3_ab'].values
+    poses[:, 6] = df['q4_ab'].values
+    return imgs_paths1, imgs_paths2, poses, scenes, scenes_ids
