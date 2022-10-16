@@ -31,7 +31,6 @@ class MSTransPoseNet(nn.Module):
         self.transformer_rot = Transformer(config_rot)
 
         decoder_dim = self.transformer_t.d_model
-        #decoder_dim *= 2
 
         self.input_proj_t = nn.Conv2d(self.backbone.num_channels[0]*2, decoder_dim, kernel_size=1)
         self.input_proj_rot = nn.Conv2d(self.backbone.num_channels[1]*2, decoder_dim, kernel_size=1)
