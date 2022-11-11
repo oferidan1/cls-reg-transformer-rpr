@@ -39,8 +39,7 @@ class C2FCameraPoseDataset(CameraPoseDataset):
                 joblib.dump(kmeans_position, filename)
 
                 scene_orientations = self.poses[locs, 3:]
-                kmeans_orientation = KMeans(n_clusters=num_orientation_clusters, random_state=random_state).fit(
-                    scene_orientations)
+                kmeans_orientation = KMeans(n_clusters=num_orientation_clusters, random_state=random_state).fit(scene_orientations)
                 filename = labels_file + '_scene_{}_orientation_{}_classes.sav'.format(self.scenes[locs][0], num_orientation_clusters)
                 print(filename)
                 joblib.dump(kmeans_orientation, filename)
@@ -56,6 +55,8 @@ class C2FCameraPoseDataset(CameraPoseDataset):
             self.position_cluster_ids[locs] = kmeans_position.predict(self.poses[locs, :3]).astype(np.int)
             self.orientation_centroids[i] = kmeans_orientation.cluster_centers_.astype(np.float32)
             self.orientation_cluster_ids[locs] = kmeans_orientation.predict(self.poses[locs, 3:]).astype(np.int)
+        print(self.position_centroids)
+        print(self.orientation_centroids)
 
     def __len__(self):
         return self.dataset_size
