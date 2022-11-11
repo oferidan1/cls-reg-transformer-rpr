@@ -21,6 +21,9 @@ class MSTransPoseNet(nn.Module):
         num_scenes = config.get("num_scenes")
         self.backbone = build_backbone(config)
 
+        nclusters_position = config.get("nclusters_position")
+        nclusters_orientation = config.get("nclusters_orientation")
+
         config_t = {**config}
         config_t["num_encoder_layers"] = config["num_t_encoder_layers"]
         config_t["num_decoder_layers"] = config["num_t_decoder_layers"]
@@ -35,14 +38,15 @@ class MSTransPoseNet(nn.Module):
         self.input_proj_t = nn.Conv2d(self.backbone.num_channels[0]*2, decoder_dim, kernel_size=1)
         self.input_proj_rot = nn.Conv2d(self.backbone.num_channels[1]*2, decoder_dim, kernel_size=1)
 
-        self.query_embed_t = nn.Embedding(num_scenes, decoder_dim)
-        self.query_embed_rot = nn.Embedding(num_scenes, decoder_dim)
+        self.query_embed_t = nn.Embedding(nclusters_position, decoder_dim)
+        self.query_embed_rot = nn.Embedding(nclusters_orientation, decoder_dim)
 
         self.log_softmax = nn.LogSoftmax(dim=1)
 
         self.scene_embed = nn.Linear(decoder_dim*2, 1)
         self.regressor_head_t = nn.Sequential(*[PoseRegressor(decoder_dim, 3) for _ in range(num_scenes)])
         self.regressor_head_rot = nn.Sequential(*[PoseRegressor(decoder_dim, 4) for _ in range(num_scenes)])
+        self.detect_scene = config["detect_scene"]
 
     def forward_transformers(self, data):
         """
@@ -58,7 +62,9 @@ class MSTransPoseNet(nn.Module):
         """
         samples1 = data.get('img1')
         samples2 = data.get('img2')
-        scene_indices = data.get('scene')
+        #scene_indices = data.get('scene')
+        #position_cluster_id = data.get('position_cluster_id')
+        #orientation_cluster_id = data.get('orientation_cluster_id')
         batch_size = samples1.shape[0]
 
         # Handle data structures
@@ -78,9 +84,11 @@ class MSTransPoseNet(nn.Module):
         pos1[0] = torch.cat((pos1[0], pos2[0]), dim=1)
         pos1[1] = torch.cat((pos1[1], pos2[1]), dim=1)
 
-        sum1 = sum(sum(sum(features1[0].mask)))
-        sum2 = sum(sum(sum(features2[0].mask)))
-        assert sum1==sum2
+        #zero non relevant mask
+        features1[0].mask = torch.zeros_like(features1[0].mask)
+        #sum1 = sum(sum(sum(features1[0].mask)))
+        #sum2 = sum(sum(sum(features2[0].mask)))
+        #assert sum1==sum2
 
 
         src_t, mask_t = features1[0].decompose()
@@ -92,21 +100,30 @@ class MSTransPoseNet(nn.Module):
         local_descs_t = self.transformer_t(self.input_proj_t(src_t), mask_t, self.query_embed_t.weight, pos1[0])[0][0]
         local_descs_rot = self.transformer_rot(self.input_proj_rot(src_rot), mask_rot, self.query_embed_rot.weight, pos1[1])[0][0]
 
-        # Get the scene index with FC + log-softmax
-        scene_log_distr = self.log_softmax(self.scene_embed(torch.cat((local_descs_t, local_descs_rot), dim=2))).squeeze(2)
-        _, max_indices = scene_log_distr.max(dim=1)
-        if scene_indices is not None:
-            max_indices = scene_indices
-        # Take the global latents by zeroing other scene's predictions and summing up
-        w = local_descs_t*0
-        w[range(batch_size),max_indices, :] = 1
-        global_desc_t = torch.sum(w * local_descs_t, dim=1)
-        global_desc_rot = torch.sum(w * local_descs_rot, dim=1)
+        # TODO
+        # replace number of scene with number of cluster
 
-        return {'global_desc_t':global_desc_t,
-                'global_desc_rot':global_desc_rot,
-                'scene_log_distr':scene_log_distr,
-                'max_indices':max_indices}
+        scene_log_distr = 0
+        if self.detect_scene:
+            # Get the scene index with FC + log-softmax
+            scene_log_distr = self.log_softmax(self.scene_embed(torch.cat((local_descs_t, local_descs_rot), dim=2))).squeeze(2)
+            _, max_indices = scene_log_distr.max(dim=1)
+
+            #if scene_indices is not None:
+            #    max_indices = scene_indices
+            # Take the global latents by zeroing other scene's predictions and summing up
+            w = local_descs_t*0
+            w[range(batch_size),max_indices, :] = 1
+            global_desc_t = torch.sum(w * local_descs_t, dim=1)
+            global_desc_rot = torch.sum(w * local_descs_rot, dim=1)
+
+            return {'global_desc_t':global_desc_t,
+                    'global_desc_rot':global_desc_rot,
+                    'scene_log_distr':scene_log_distr,
+                    'max_indices':max_indices}
+
+        return {'global_desc_t': local_descs_t,
+                'global_desc_rot': local_descs_rot}
 
     def forward_heads(self, transformers_res):
         """
@@ -127,7 +144,7 @@ class MSTransPoseNet(nn.Module):
             x_t = self.regressor_head_t[max_indices[i]](global_desc_t[i].unsqueeze(0))
             x_rot = self.regressor_head_rot[max_indices[i]](global_desc_rot[i].unsqueeze(0))
             expected_pose[i, :] = torch.cat((x_t, x_rot), dim=1)
-        return {'pose':expected_pose, 'scene_log_distr':transformers_res.get('scene_log_distr')}
+        return {'pose':expected_pose}
 
     def forward(self, data):
         """ The forward pass expects a dictionary with the following keys-values
